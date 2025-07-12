@@ -1,13 +1,15 @@
 import { spawn } from "child_process";
 import { promisify } from "util";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, rm, readdir } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
+import { existsSync } from "fs";
 
 export interface DownloadOptions {
   url: string;
   quality?: string;
   outputDir?: string;
+  force?: boolean;
 }
 
 export interface DownloadResult {
@@ -16,7 +18,29 @@ export interface DownloadResult {
 }
 
 export async function downloadVideo(options: DownloadOptions): Promise<DownloadResult> {
-  const { url, quality = "best[height<=480]", outputDir } = options;
+  const { url, quality = "best[height<=480]", outputDir, force = false } = options;
+
+  // Extract video ID from URL
+  const videoIdMatch = url.match(/(?:v=|\/)([\w-]{11})(?:\?|&|$)/);
+  const videoId = videoIdMatch ? videoIdMatch[1] : null;
+
+  // If not forcing and we have a video ID, check for existing video files
+  if (!force && videoId) {
+    const cwd = process.cwd();
+    const files = await readdir(cwd);
+    
+    // Look for video files containing the video ID
+    const existingVideo = files.find(file => 
+      file.includes(videoId) && 
+      (file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv'))
+    );
+    
+    if (existingVideo) {
+      const videoPath = resolve(cwd, existingVideo);
+      console.log(`✓ Using existing video file: ${videoPath}`);
+      return { videoPath, tempDir: cwd };
+    }
+  }
 
   // Create temp directory if not provided
   const tempDir = outputDir || await mkdtemp(join(tmpdir(), "video-to-transcript-"));

@@ -68,6 +68,34 @@ bun run start "video.mp4" --output transcript.txt --timestamps --language en
 
 When using local files, the download step is skipped and the tool processes your video file directly.
 
+### Resume Support
+
+The tool automatically resumes from where it left off:
+
+- If you run the tool and it fails during transcription, you can simply run the same command again
+- It will detect existing video/audio files and skip those steps
+- This saves time and bandwidth by not re-downloading or re-extracting
+
+```bash
+# First run fails due to API issues
+bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc"
+# Downloads video ✓
+# Extracts audio ✓
+# Transcription fails ✗
+
+# Second run automatically resumes
+bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc"
+# ✓ Using existing video file: ...
+# ✓ Using existing audio file: ...
+# Transcribes audio ✓
+```
+
+To force re-download and re-extraction, use the `--force` flag:
+
+```bash
+bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc" --force
+```
+
 ## Options
 
 - `-k, --api-key <key>` - Deepgram API key (defaults to DEEPGRAM_API_KEY env var)
@@ -77,6 +105,7 @@ When using local files, the download step is skipped and the tool processes your
 - `-o, --output <file>` - Output file for transcript
 - `-t, --timestamps` - Include timestamps in transcript
 - `--keep-temp` - Keep temporary video/audio files after processing
+- `-f, --force` - Force re-download and re-extraction even if files exist
 
 ## Development
 

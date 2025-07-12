@@ -1,10 +1,12 @@
 import { spawn } from "child_process";
 import { join, parse } from "path";
+import { existsSync } from "fs";
 
 export interface ExtractAudioOptions {
   videoPath: string;
   outputFormat?: "mp3" | "wav" | "m4a";
   bitrate?: string;
+  force?: boolean;
 }
 
 export interface ExtractAudioResult {
@@ -12,10 +14,16 @@ export interface ExtractAudioResult {
 }
 
 export async function extractAudio(options: ExtractAudioOptions): Promise<ExtractAudioResult> {
-  const { videoPath, outputFormat = "mp3", bitrate = "128k" } = options;
+  const { videoPath, outputFormat = "mp3", bitrate = "128k", force = false } = options;
   
   const parsedPath = parse(videoPath);
   const audioPath = join(parsedPath.dir, `${parsedPath.name}.${outputFormat}`);
+
+  // Check if audio file already exists and we're not forcing re-extraction
+  if (!force && existsSync(audioPath)) {
+    console.log(`✓ Using existing audio file: ${audioPath}`);
+    return { audioPath };
+  }
 
   // Get video duration first for progress calculation
   const duration = await getVideoDuration(videoPath);

@@ -26,6 +26,7 @@ program
   .option("-o, --output <file>", "Output file for transcript")
   .option("-t, --timestamps", "Include timestamps in transcript")
   .option("--keep-temp", "Keep temporary files after processing")
+  .option("-f, --force", "Force re-download and re-extraction even if files exist")
   .action(async (input, options) => {
     const apiKey = options.apiKey || process.env.DEEPGRAM_API_KEY;
 
@@ -50,7 +51,8 @@ program
         console.log("Downloading video...");
         const downloadResult = await downloadVideo({
           url: input,
-          quality: options.quality
+          quality: options.quality,
+          force: options.force
         });
         videoPath = downloadResult.videoPath;
         tempDir = downloadResult.tempDir;
@@ -60,7 +62,8 @@ program
       // Step 2: Extract audio
       const { audioPath } = await extractAudio({
         videoPath,
-        outputFormat: "mp3"
+        outputFormat: "mp3",
+        force: options.force
       });
       console.log(`Audio extracted: ${audioPath}`);
 
