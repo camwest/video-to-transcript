@@ -1,190 +1,86 @@
-# video-to-transcript
+# Video to Transcript
 
-A TypeScript/Bun tool that downloads YouTube videos, extracts audio, transcribes them using Deepgram's API, and generates Kindle-optimized EPUB ebooks with AI-enhanced metadata. Also supports transcribing local video files directly.
+Convert YouTube videos to text transcripts and EPUB ebooks using AI-powered transcription.
 
-## Prerequisites
+## What It Does
 
-- [Bun](https://bun.sh) runtime
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - for downloading videos
-- [FFmpeg](https://ffmpeg.org/) - for audio extraction
-- [Pandoc](https://pandoc.org/) - for EPUB generation
-- [Deepgram API key](https://console.deepgram.com/) - for transcription
-- [OpenAI API key](https://platform.openai.com/api-keys) - for AI-enhanced metadata (optional)
+Downloads YouTube videos, extracts audio, transcribes using Deepgram API, and generates either plain text or enhanced EPUB ebooks with AI-powered metadata and speaker identification.
 
-## Installation
+## How It Works
 
+```
+YouTube URL ──┐
+              │
+              ▼
+         ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+         │ yt-dlp  │───▶│ ffmpeg  │───▶│Deepgram│───▶│ Output  │
+         │Download │    │Extract  │    │Transcribe│   │EPUB/TXT │
+         └─────────┘    │Audio    │    │+Speaker │    └─────────┘
+              │         └─────────┘    │Diarize  │         ▲
+              ▼                        └─────────┘         │
+         video.mp4 ────▶ audio.mp3 ────▶ transcript ───────┘
+                                              │
+                                              ▼
+                                        ┌─────────┐
+                                        │ OpenAI  │
+                                        │Enhance  │
+                                        │Metadata │
+                                        └─────────┘
+```
+
+1. **Download** - `yt-dlp` downloads video with deterministic filenames
+2. **Extract** - `ffmpeg` extracts audio to MP3  
+3. **Transcribe** - Deepgram API converts speech to text with speaker diarization
+4. **Generate** - Creates EPUB with AI-enhanced metadata or plain text output
+
+## Setup
+
+Install dependencies:
 ```bash
-# Clone the repository
-git clone https://github.com/camwest/video-to-transcript.git
-cd video-to-transcript
-
-# Install dependencies
-bun install
-
-# Install system dependencies
 # macOS
 brew install yt-dlp ffmpeg pandoc
 
-# Ubuntu/Debian
-sudo apt update
+# Ubuntu/Debian  
 sudo apt install yt-dlp ffmpeg pandoc
+```
 
-# Windows (using Chocolatey)
-choco install yt-dlp ffmpeg pandoc
+Set API keys:
+```bash
+export DEEPGRAM_API_KEY="your-deepgram-key"
+export OPENAI_API_KEY="your-openai-key"  # Optional, for AI metadata
+```
 
-# Copy environment variables
-cp .env.example .env
-# Edit .env and add your API keys:
-# DEEPGRAM_API_KEY=your_deepgram_key
-# OPENAI_API_KEY=your_openai_key (optional, for AI-enhanced metadata)
+Install:
+```bash
+bun install
 ```
 
 ## Usage
 
-### Default: Generate EPUB Ebook
-
-By default, the tool generates a Kindle-optimized EPUB file with AI-enhanced metadata:
-
 ```bash
-# Basic usage - generates EPUB with AI-enhanced metadata
+# Basic - creates EPUB
 bun run start "https://www.youtube.com/watch?v=VIDEO_ID"
-# Output: video-title.epub
 
-# Disable AI enhancement (use raw YouTube metadata)
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --no-ai
-
-# Custom output path
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --output mybook.epub
-```
-
-### Plain Text Output
-
-To get plain text transcripts instead of EPUB:
-
-```bash
-# Output to console
+# Plain text output
 bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --txt
 
-# Save to text file
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --txt --output transcript.txt
-
-# Include timestamps
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --txt --timestamps
+# With options
+bun run start "URL" -o output.epub --timestamps --force
 ```
 
-### YouTube Videos
+### Key Options
 
-```bash
-# Specify API keys directly
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --api-key YOUR_DEEPGRAM_KEY --ai-key YOUR_OPENAI_KEY
+- `-o, --output <file>` - Output file path
+- `--txt` - Plain text instead of EPUB
+- `--timestamps` - Include timestamps
+- `-f, --force` - Skip cache, re-download/process
+- `--no-ai` - Disable AI metadata enhancement
+- `--keep-temp` - Keep temporary files
 
-# Custom video quality (default: best[height<=480])
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --quality "best[height<=720]"
+## Features
 
-# Different language
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --language es
-
-# Keep temporary files
-bun run start "https://www.youtube.com/watch?v=VIDEO_ID" --keep-temp
-```
-
-### Local Video Files
-
-You can also transcribe already downloaded video files:
-
-```bash
-# Basic usage with local file - generates EPUB
-bun run start "path/to/video.mp4"
-
-# Example with a downloaded YouTube video
-bun run start "How to Find & Be a Great Romantic Partner ｜ Lori Gottlieb [lYK4UFf8mlc].mp4"
-
-# Generate text transcript instead
-bun run start "video.mp4" --txt --output transcript.txt --timestamps
-
-# With custom output
-bun run start "video.mp4" --output mybook.epub --language en
-```
-
-When using local files, the download step is skipped and the tool processes your video file directly. For EPUB generation, metadata will be extracted from the filename or .info.json file if available.
-
-### Resume Support
-
-The tool automatically resumes from where it left off:
-
-- If you run the tool and it fails during transcription, you can simply run the same command again
-- It will detect existing video/audio files and skip those steps
-- This saves time and bandwidth by not re-downloading or re-extracting
-
-```bash
-# First run fails due to API issues
-bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc"
-# Downloads video ✓
-# Extracts audio ✓
-# Transcription fails ✗
-
-# Second run automatically resumes
-bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc"
-# ✓ Using existing video file: ...
-# ✓ Using existing audio file: ...
-# Transcribes audio ✓
-```
-
-To force re-download and re-extraction, use the `--force` flag:
-
-```bash
-bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc" --force
-```
-
-## Options
-
-### Core Options
-- `-k, --api-key <key>` - Deepgram API key (defaults to DEEPGRAM_API_KEY env var)
-- `-q, --quality <quality>` - Video quality selector (default: "best[height<=480]")
-- `-l, --language <lang>` - Language code for transcription (default: "en")
-- `-m, --model <model>` - Deepgram model to use (default: "nova-3")
-- `-o, --output <file>` - Output file path (defaults to .epub with video title)
-- `-t, --timestamps` - Include timestamps in transcript (text mode only)
-- `--keep-temp` - Keep temporary video/audio files after processing
-- `-f, --force` - Force re-download and re-extraction even if files exist
-
-### EPUB/Text Options
-- `--txt` - Output plain text instead of EPUB (alias for --no-epub)
-- `--no-epub` - Disable EPUB generation, output plain text only
-- `--no-ai` - Disable AI enhancement of metadata (EPUB mode)
-- `--ai-key <key>` - OpenAI API key for metadata enhancement (defaults to OPENAI_API_KEY env var)
-
-## EPUB Generation Details
-
-The tool uses Pandoc to generate high-quality EPUB files optimized for Kindle devices:
-
-### Features
-- **AI-Enhanced Metadata**: Uses OpenAI to clean up YouTube titles and generate professional book descriptions
-- **Cover Images**: Automatically downloads and includes video thumbnails as book covers
-- **Kindle Optimization**: Custom CSS styling optimized for e-reader displays
-- **Clean Formatting**: Converts transcript into properly formatted paragraphs with chapter breaks
-
-### How It Works
-1. Downloads video metadata and thumbnail from YouTube
-2. Transcribes audio using Deepgram's Nova-3 model
-3. Enhances metadata with OpenAI (removes YouTube-specific formatting, generates book description)
-4. Generates Markdown with YAML frontmatter
-5. Uses Pandoc to create EPUB with cover image and custom CSS
-6. Outputs a Kindle-ready EPUB file
-
-### Pandoc Requirements
-The tool requires Pandoc version 1.6 or higher. If not installed, you'll see an error with installation instructions for your platform.
-
-## Development
-
-```bash
-# Run in watch mode
-bun run dev
-
-# Run with a test URL
-bun run start "https://www.youtube.com/watch?v=lYK4UFf8mlc"
-```
-
-## License
-
-MIT
+- **Smart Caching** - Reuses downloads, audio, and transcripts
+- **Speaker ID** - AI identifies and names speakers in multi-person content  
+- **EPUB Generation** - Rich ebook format with metadata and cover
+- **Progress Tracking** - Real-time download and processing progress
+- **Deterministic Paths** - Predictable file naming for reliability
