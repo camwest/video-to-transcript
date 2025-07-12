@@ -187,3 +187,4 @@ dist
 *.ogg
 downloads/
 temp/
+*.epub
