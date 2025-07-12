@@ -59,7 +59,10 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
 
   // Create temp directory if not provided
   const tempDir = outputDir || await mkdtemp(join(tmpdir(), "video-to-transcript-"));
-  const outputPath = join(tempDir, "%(title)s.%(ext)s");
+  
+  // Use a deterministic filename based on video ID
+  const videoFilename = videoId ? `${videoId}.%(ext)s` : "video.%(ext)s";
+  const outputPath = join(tempDir, videoFilename);
 
   return new Promise((resolve, reject) => {
     const args = [
@@ -75,30 +78,17 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
     ];
 
     const ytDlp = spawn("yt-dlp", args);
-    let videoPath = "";
     let error = "";
 
     ytDlp.stdout.on("data", (data) => {
       const output = data.toString();
       
-      // Try to capture the output filename
-      const match = output.match(/\[download\] Destination: (.+)/);
-      if (match) {
-        videoPath = match[1].trim();
+      if (output.includes("[download]") && output.includes("%")) {
+        // Progress update - use carriage return to overwrite the line
+        process.stdout.write(`\r${output.trim()}`);
+      } else if (output.trim()) {
+        // Other messages
         console.log(output.trim());
-      } else {
-        // Also check for already downloaded message
-        const alreadyMatch = output.match(/\[download\] (.+) has already been downloaded/);
-        if (alreadyMatch) {
-          videoPath = alreadyMatch[1].trim();
-          console.log(output.trim());
-        } else if (output.includes("[download]") && output.includes("%")) {
-          // Progress update - use carriage return to overwrite the line
-          process.stdout.write(`\r${output.trim()}`);
-        } else if (output.trim()) {
-          // Other messages
-          console.log(output.trim());
-        }
       }
     });
 
@@ -112,10 +102,24 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
       
       if (code !== 0) {
         reject(new Error(`yt-dlp exited with code ${code}: ${error}`));
-      } else if (!videoPath) {
-        // If we didn't capture the path, try to find the downloaded file
-        reject(new Error("Could not determine downloaded file path"));
-      } else {
+        return;
+      }
+      
+      // Determine the video file path based on our deterministic naming
+      try {
+        const files = await readdir(tempDir);
+        const videoFile = files.find(file => 
+          (videoId && file.startsWith(videoId)) || (!videoId && file.startsWith('video'))
+        );
+        
+        if (!videoFile) {
+          reject(new Error("Downloaded video file not found"));
+          return;
+        }
+        
+        const videoPath = join(tempDir, videoFile);
+        console.log(`✓ Video downloaded: ${videoPath}`);
+        
         // Try to load the metadata from the info.json file
         let metadata: VideoMetadata | undefined;
         const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
@@ -128,6 +132,8 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
         }
         
         resolve({ videoPath, tempDir, metadata });
+      } catch (error) {
+        reject(new Error(`Failed to process downloaded file: ${error}`));
       }
     });
 
