@@ -56,6 +56,16 @@ const bookMetadataSchema = z.object({
   description: z.string().describe("A compelling 2-3 paragraph book description that summarizes what readers will learn"),
 });
 
+// Schema for speaker identification
+const speakerIdentificationSchema = z.object({
+  speakers: z.record(z.string()).describe("Mapping of speaker numbers to FIRST NAMES ONLY (e.g., '0': 'Andrew', '1': 'Lori')"),
+  confidence: z.enum(["high", "medium", "low"]).describe("Confidence in speaker identification accuracy")
+});
+
+interface SpeakerMapping {
+  [speakerNumber: string]: string;
+}
+
 async function enhanceMetadataWithAI(
   metadata: VideoMetadata,
   transcript: string,
@@ -68,7 +78,7 @@ async function enhanceMetadataWithAI(
   
   try {
     const { object } = await generateObject({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4.1"),
       schema: bookMetadataSchema,
       system: "You are a helpful assistant that creates clean, professional book metadata from YouTube video information. Keep titles concise and descriptions engaging but brief.",
       prompt: `Given this YouTube video metadata, create a clean book title and description suitable for an ebook:
@@ -94,6 +104,63 @@ Please provide:
       description: metadata.description,
     };
   }
+}
+
+async function identifySpeakers(
+  metadata: VideoMetadata,
+  transcript: string,
+  apiKey: string
+): Promise<SpeakerMapping> {
+  const transcriptSnippet = transcript.substring(0, 2000); // First 2000 chars for intro analysis
+  
+  // Count detected speakers from transcript
+  const speakerMatches = transcript.match(/\*\*Speaker \d+:\*\*/g) || [];
+  const uniqueSpeakers = Array.from(new Set(speakerMatches));
+  const speakerCount = uniqueSpeakers.length;
+  
+  // Create OpenAI provider instance with API key
+  const openai = createOpenAI({ apiKey });
+  
+  try {
+    const { object } = await generateObject({
+      model: openai("gpt-4.1"),
+      schema: speakerIdentificationSchema,
+      system: "You are an expert at identifying speakers in YouTube video content. Extract FIRST NAMES ONLY from video metadata and transcript introductions.",
+      prompt: `Identify speakers by FIRST NAME ONLY for this YouTube video:
+
+Video Title: "${metadata.title}"
+Channel: "${metadata.uploader}"
+Description: "${metadata.description.substring(0, 500)}..."
+Transcript Start: "${transcriptSnippet}"
+
+Detected ${speakerCount} speakers. Return first names only (e.g., 'Andrew', 'Lori').
+Speaker 0 is typically the host/channel owner.
+Be confident only if names are clearly mentioned in the content.`,
+    });
+
+    // Only return mapping if confidence is high or medium
+    if (object.confidence === "low") {
+      console.warn("Low confidence in speaker identification, skipping name replacement");
+      return {};
+    }
+
+    console.log(`Speaker identification (${object.confidence} confidence):`, object.speakers);
+    return object.speakers;
+
+  } catch (error) {
+    console.warn("Speaker identification failed:", error);
+    return {};
+  }
+}
+
+function replaceSpeakerNames(transcript: string, speakerMapping: SpeakerMapping): string {
+  return transcript.replace(
+    /\*\*Speaker (\d+):\*\*/g,
+    (match, speakerNum) => {
+      const firstName = speakerMapping[speakerNum];
+      return firstName ? `**${firstName}:**` : match;
+    }
+  );
 }
 
 async function checkPandocAvailable(): Promise<boolean> {
@@ -232,8 +299,19 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
       console.warn("AI enhancement requested but no API key provided. Using original metadata.");
     }
     
+    // Identify and replace speaker names if AI is enabled
+    let processedTranscript = transcript;
+    if (useAI && aiApiKey) {
+      console.log("Identifying speakers with AI...");
+      const speakerMapping = await identifySpeakers(metadata, transcript, aiApiKey);
+      if (Object.keys(speakerMapping).length > 0) {
+        processedTranscript = replaceSpeakerNames(transcript, speakerMapping);
+        console.log("Speaker names replaced in transcript");
+      }
+    }
+    
     // Generate Markdown content
-    const markdownContent = formatMarkdownContent(transcript, metadata, enhancedMetadata);
+    const markdownContent = formatMarkdownContent(processedTranscript, metadata, enhancedMetadata);
     await writeFile(markdownPath, markdownContent, 'utf-8');
     
     // Write CSS file
