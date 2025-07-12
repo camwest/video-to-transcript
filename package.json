@@ -1,0 +1,22 @@
+{
+  "name": "video-to-transcript",
+  "version": "0.1.0",
+  "description": "Download YouTube videos, extract audio, and transcribe with Deepgram",
+  "module": "src/index.ts",
+  "type": "module",
+  "bin": {
+    "video-to-transcript": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.10.0"
+  }
+}
