@@ -68,14 +68,12 @@ program
       console.log(`Audio extracted: ${audioPath}`);
 
       // Step 3: Transcribe audio
-      console.log("Transcribing audio with Deepgram...");
       const result = await transcribeAudio({
         audioPath,
         apiKey,
         language: options.language,
         model: options.model
       });
-      console.log("Transcription complete!");
 
       // Format the transcript
       const formattedTranscript = formatTranscript(result, options.timestamps);

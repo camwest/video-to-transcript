@@ -1,4 +1,7 @@
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
+import { createReadStream } from "fs";
+import { PassThrough } from "stream";
+import { createClient } from "@deepgram/sdk";
 
 export interface TranscribeOptions {
   audioPath: string;
@@ -32,51 +35,59 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
     paragraphs = true
   } = options;
 
-  // Read the audio file
-  const audioBuffer = await readFile(audioPath);
+  // Get file size for progress indication
+  const fileStats = await stat(audioPath);
+  const fileSizeMB = (fileStats.size / (1024 * 1024)).toFixed(1);
+  const totalSize = fileStats.size;
+  
+  // Initialize Deepgram client
+  const deepgram = createClient(apiKey);
 
-  // Build query parameters
-  const params = new URLSearchParams({
-    language,
-    model,
-    smart_format: smartFormat.toString(),
-    punctuate: punctuate.toString(),
-    paragraphs: paragraphs.toString()
-  });
+  try {
+    process.stdout.write(`\rTranscribing audio... Starting upload of ${fileSizeMB}MB file`);
+    
+    // Use the official example - create a read stream directly
+    const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+      createReadStream(audioPath),
+      {
+        model,
+        language,
+        smart_format: smartFormat,
+        punctuate,
+        paragraphs
+      }
+    );
 
-  const url = `https://api.deepgram.com/v1/listen?${params}`;
+    process.stdout.write("\rTranscribing audio... 100%\n");
 
-  console.log("Sending audio to Deepgram for transcription...");
+    if (error) {
+      throw new Error(`Deepgram API error: ${JSON.stringify(error)}`);
+    }
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Token ${apiKey}`,
-      "Content-Type": "audio/*"
-    },
-    body: audioBuffer
-  });
+    if (!result) {
+      throw new Error("No result returned from Deepgram");
+    }
+    
+    // Extract the transcript and metadata
+    const channel = result.results?.channels?.[0];
+    const alternative = channel?.alternatives?.[0];
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Deepgram API error: ${response.status} - ${errorText}`);
+    if (!alternative?.transcript) {
+      console.error("Result structure:", JSON.stringify(result, null, 2));
+      throw new Error("No transcript found in Deepgram response");
+    }
+
+    return {
+      transcript: alternative.transcript,
+      words: alternative.words,
+      duration: result.metadata?.duration
+    };
+  } catch (error: any) {
+    if (error.status) {
+      throw new Error(`Deepgram API error: ${error.status} - ${error.message}`);
+    }
+    throw error;
   }
-
-  const result = await response.json();
-
-  // Extract the transcript and metadata
-  const channel = result.results?.channels?.[0];
-  const alternative = channel?.alternatives?.[0];
-
-  if (!alternative?.transcript) {
-    throw new Error("No transcript found in Deepgram response");
-  }
-
-  return {
-    transcript: alternative.transcript,
-    words: alternative.words,
-    duration: result.metadata?.duration
-  };
 }
 
 export function formatTranscript(result: TranscriptionResult, includeTimestamps: boolean = false): string {
