@@ -62,8 +62,18 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
         throw new Error("No transcript found in cached Deepgram response");
       }
 
+      // Use paragraphs - they should be available since we requested them
+      const paragraphsData = result.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs;
+      if (!paragraphsData || paragraphsData.length === 0) {
+        throw new Error("Paragraphs not found in Deepgram response despite being requested. This may indicate an API issue or unsupported audio format.");
+      }
+      
+      const formattedTranscript = paragraphsData
+        .map((p: any) => p.sentences.map((s: any) => s.text).join(' '))
+        .join('\n\n');
+
       return {
-        transcript: alternative.transcript,
+        transcript: formattedTranscript,
         words: alternative.words,
         duration: result.metadata?.duration
       };
@@ -173,8 +183,18 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
 
         console.log(`Deepgram response saved: ${responseFile}`);
 
+        // Use paragraphs - they should be available since we requested them
+        const paragraphsData = result.results?.channels?.[0]?.alternatives?.[0]?.paragraphs?.paragraphs;
+        if (!paragraphsData || paragraphsData.length === 0) {
+          throw new Error("Paragraphs not found in Deepgram response despite being requested. This may indicate an API issue or unsupported audio format.");
+        }
+        
+        const formattedTranscript = paragraphsData
+          .map((p: any) => p.sentences.map((s: any) => s.text).join(' '))
+          .join('\n\n');
+
         resolve({
-          transcript: alternative.transcript,
+          transcript: formattedTranscript,
           words: alternative.words,
           duration: result.metadata?.duration
         });
