@@ -1,9 +1,10 @@
 import { spawn } from "child_process";
 import { promisify } from "util";
-import { mkdtemp, rm, readdir } from "fs/promises";
+import { mkdtemp, rm, readdir, readFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { existsSync } from "fs";
+import type { VideoMetadata } from "./ebook";
 
 export interface DownloadOptions {
   url: string;
@@ -15,6 +16,7 @@ export interface DownloadOptions {
 export interface DownloadResult {
   videoPath: string;
   tempDir: string;
+  metadata?: VideoMetadata;
 }
 
 export async function downloadVideo(options: DownloadOptions): Promise<DownloadResult> {
@@ -38,7 +40,20 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
     if (existingVideo) {
       const videoPath = resolve(cwd, existingVideo);
       console.log(`✓ Using existing video file: ${videoPath}`);
-      return { videoPath, tempDir: cwd };
+      
+      // Try to load metadata from existing info.json file
+      const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
+      let metadata: VideoMetadata | undefined;
+      if (existsSync(infoJsonPath)) {
+        try {
+          const infoJson = await readFile(infoJsonPath, 'utf-8');
+          metadata = JSON.parse(infoJson);
+        } catch (error) {
+          console.warn("Failed to load existing metadata:", error);
+        }
+      }
+      
+      return { videoPath, tempDir: cwd, metadata };
     }
   }
 
@@ -54,6 +69,8 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
       "--no-warnings",
       "--quiet",
       "--progress",
+      "--write-info-json",
+      "--write-thumbnail",
       url
     ];
 
@@ -89,7 +106,7 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
       error += data.toString();
     });
 
-    ytDlp.on("close", (code) => {
+    ytDlp.on("close", async (code) => {
       // Print newline to clear the progress line
       console.log("");
       
@@ -99,7 +116,18 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
         // If we didn't capture the path, try to find the downloaded file
         reject(new Error("Could not determine downloaded file path"));
       } else {
-        resolve({ videoPath, tempDir });
+        // Try to load the metadata from the info.json file
+        let metadata: VideoMetadata | undefined;
+        const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
+        
+        try {
+          const infoJson = await readFile(infoJsonPath, 'utf-8');
+          metadata = JSON.parse(infoJson);
+        } catch (error) {
+          console.warn("Failed to load video metadata:", error);
+        }
+        
+        resolve({ videoPath, tempDir, metadata });
       }
     });
 
