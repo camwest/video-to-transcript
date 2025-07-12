@@ -91,7 +91,8 @@ program
         audioPath,
         apiKey,
         language: options.language,
-        model: options.model
+        model: options.model,
+        force: options.force
       });
 
       // Format the transcript

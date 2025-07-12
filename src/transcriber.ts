@@ -1,6 +1,6 @@
 import { stat } from "fs/promises";
 import { spawn } from "child_process";
-import { readFileSync, unlinkSync } from "fs";
+import { readFileSync, unlinkSync, existsSync } from "fs";
 
 export interface TranscribeOptions {
   audioPath: string;
@@ -12,6 +12,7 @@ export interface TranscribeOptions {
   paragraphs?: boolean;
   utterances?: boolean;
   diarize?: boolean;
+  force?: boolean;
 }
 
 export interface TranscriptionResult {
@@ -35,8 +36,42 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
     punctuate = true,
     paragraphs = true,
     utterances = true,
-    diarize = true
+    diarize = true,
+    force = false
   } = options;
+
+  // Check for existing Deepgram response file
+  const responseFile = audioPath.replace(/\.[^.]+$/, '.deepgram.json');
+  
+  if (!force && existsSync(responseFile)) {
+    console.log(`✓ Using existing transcription: ${responseFile}`);
+    try {
+      const responseText = readFileSync(responseFile, 'utf8');
+      const result = JSON.parse(responseText);
+
+      // Check for API errors in the response
+      if (result.err_code) {
+        throw new Error(`Deepgram API error: ${result.err_code} - ${result.err_msg}`);
+      }
+
+      // Extract the transcript and metadata
+      const channel = result.results?.channels?.[0];
+      const alternative = channel?.alternatives?.[0];
+
+      if (!alternative?.transcript) {
+        throw new Error("No transcript found in cached Deepgram response");
+      }
+
+      return {
+        transcript: alternative.transcript,
+        words: alternative.words,
+        duration: result.metadata?.duration
+      };
+    } catch (error) {
+      console.log(`Error reading cached transcription, will re-transcribe: ${error}`);
+      // Fall through to re-transcribe
+    }
+  }
 
   // Get file size for progress indication
   const fileStats = await stat(audioPath);
@@ -56,15 +91,15 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
   const url = `https://api.deepgram.com/v1/listen?${params}`;
 
   return new Promise((resolve, reject) => {
-    // Create a temporary file to store the response
-    const tempResponseFile = `/tmp/deepgram-response-${Date.now()}.json`;
+    // Save response alongside the audio file with consistent naming
+    const responseFile = audioPath.replace(/\.[^.]+$/, '.deepgram.json');
     
     const args = [
       '-X', 'POST',
       '-H', `Authorization: Token ${apiKey}`,
       '-H', 'Content-Type: audio/mpeg',
       '--data-binary', `@${audioPath}`,
-      '-o', tempResponseFile,
+      '-o', responseFile,
       url
     ];
 
@@ -119,11 +154,8 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
 
       try {
         // Read and parse the response
-        const responseText = readFileSync(tempResponseFile, 'utf8');
+        const responseText = readFileSync(responseFile, 'utf8');
         const result = JSON.parse(responseText);
-        
-        // Clean up temp file
-        unlinkSync(tempResponseFile);
 
         // Check for API errors in the response
         if (result.err_code) {
@@ -139,14 +171,14 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
           throw new Error("No transcript found in Deepgram response");
         }
 
+        console.log(`Deepgram response saved: ${responseFile}`);
+
         resolve({
           transcript: alternative.transcript,
           words: alternative.words,
           duration: result.metadata?.duration
         });
       } catch (error: any) {
-        // Clean up temp file on error
-        try { unlinkSync(tempResponseFile); } catch {}
         reject(error);
       }
     });
