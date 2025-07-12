@@ -188,3 +188,4 @@ dist
 downloads/
 temp/
 *.epub
+*.deepgram.json
