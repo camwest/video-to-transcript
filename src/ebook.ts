@@ -5,6 +5,7 @@ import { writeFile } from "fs/promises";
 import { join } from "path";
 import { spawn } from "child_process";
 import { promisify } from "util";
+import { identifySpeakers, replaceSpeakerNames, type SpeakerMapping } from "./speaker-identifier";
 
 const execAsync = promisify(spawn);
 
@@ -56,16 +57,6 @@ const bookMetadataSchema = z.object({
   description: z.string().describe("A compelling 2-3 paragraph book description that summarizes what readers will learn"),
 });
 
-// Schema for speaker identification
-const speakerIdentificationSchema = z.object({
-  speakers: z.record(z.string()).default({}).describe("Mapping of speaker numbers to FIRST NAMES ONLY (e.g., '0': 'Andrew', '1': 'Lori')"),
-  confidence: z.enum(["high", "medium", "low"]).describe("Confidence in speaker identification accuracy")
-});
-
-interface SpeakerMapping {
-  [speakerNumber: string]: string;
-}
-
 async function enhanceMetadataWithAI(
   metadata: VideoMetadata,
   transcript: string,
@@ -106,69 +97,7 @@ Please provide:
   }
 }
 
-async function identifySpeakers(
-  metadata: VideoMetadata,
-  transcript: string,
-  apiKey: string
-): Promise<SpeakerMapping> {
-  const transcriptSnippet = transcript.substring(0, 2000); // First 2000 chars for intro analysis
-  
-  // Count detected speakers from transcript
-  const speakerMatches = transcript.match(/\*\*Speaker \d+:\*\*/g) || [];
-  const uniqueSpeakers = Array.from(new Set(speakerMatches));
-  const speakerCount = uniqueSpeakers.length;
-  
-  // Create OpenAI provider instance with API key
-  const openai = createOpenAI({ apiKey });
-  
-  try {
-    const { object } = await generateObject({
-      model: openai("gpt-4.1"),
-      schema: speakerIdentificationSchema,
-      system: "You are an expert at identifying speakers in YouTube video content. Extract FIRST NAMES ONLY from video metadata and transcript introductions. Always return a speakers object, even if empty when names cannot be identified.",
-      prompt: `Identify speakers by FIRST NAME ONLY for this YouTube video:
-
-Video Title: "${metadata.title}"
-Channel: "${metadata.uploader}"
-Description: "${metadata.description.substring(0, 500)}..."
-Transcript Start: "${transcriptSnippet}"
-
-Detected ${speakerCount} speakers. Return first names only (e.g., 'Andrew', 'Lori').
-Speaker 0 is typically the host/channel owner.
-Be confident only if names are clearly mentioned in the content.
-If you cannot identify names with confidence, return an empty speakers object.`,
-    });
-
-    // Only return mapping if confidence is high or medium
-    if (object.confidence === "low") {
-      console.warn("Low confidence in speaker identification, skipping name replacement");
-      return {};
-    }
-
-    // Ensure speakers object exists
-    if (!object.speakers || Object.keys(object.speakers).length === 0) {
-      console.warn("No speakers identified");
-      return {};
-    }
-
-    console.log(`Speaker identification (${object.confidence} confidence):`, object.speakers);
-    return object.speakers || {};
-
-  } catch (error) {
-    console.warn("Speaker identification failed:", error);
-    return {};
-  }
-}
-
-function replaceSpeakerNames(transcript: string, speakerMapping: SpeakerMapping): string {
-  return transcript.replace(
-    /\*\*Speaker (\d+):\*\*/g,
-    (match, speakerNum) => {
-      const firstName = speakerMapping[speakerNum];
-      return firstName ? `**${firstName}:**` : match;
-    }
-  );
-}
+// Speaker identification functions are now imported from speaker-identifier.ts
 
 async function checkPandocAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
