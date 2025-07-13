@@ -76,6 +76,7 @@ bun run start "URL" -o output.epub --timestamps --force
 - `-f, --force` - Skip cache, re-download/process
 - `--no-ai` - Disable AI metadata enhancement
 - `--cleanup` - Remove workspace directory after processing
+- `--utt-split <seconds>` - Silence duration for utterance splitting (default: 2.0)
 
 ## Features
 

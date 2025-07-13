@@ -35,6 +35,7 @@ program
   .option("--no-epub", "Disable EPUB generation, output plain text only")
   .option("--no-ai", "Disable AI enhancement of metadata")
   .option("--ai-key <key>", "OpenAI API key for metadata enhancement (or set OPENAI_API_KEY env var)")
+  .option("--utt-split <seconds>", "Silence duration for utterance splitting (default: 2.0)", parseFloat)
   .action(async (input, options) => {
     const apiKey = options.apiKey || process.env.DEEPGRAM_API_KEY;
 
@@ -100,6 +101,7 @@ program
         apiKey,
         language: options.language,
         model: options.model,
+        uttSplit: options.uttSplit,
         force: options.force
       });
 

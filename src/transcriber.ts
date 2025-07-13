@@ -12,6 +12,7 @@ export interface TranscribeOptions {
   paragraphs?: boolean;
   utterances?: boolean;
   diarize?: boolean;
+  uttSplit?: number;
   force?: boolean;
 }
 
@@ -37,6 +38,7 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
     paragraphs = true,
     utterances = true,
     diarize = true,
+    uttSplit = 2.0,
     force = false
   } = options;
 
@@ -95,7 +97,8 @@ export async function transcribeAudio(options: TranscribeOptions): Promise<Trans
     punctuate: punctuate.toString(),
     paragraphs: paragraphs.toString(),
     utterances: utterances.toString(),
-    diarize: diarize.toString()
+    diarize: diarize.toString(),
+    utt_split: uttSplit.toString()
   });
 
   const url = `https://api.deepgram.com/v1/listen?${params}`;
