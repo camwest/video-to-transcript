@@ -5,11 +5,13 @@ import { config } from "dotenv";
 import { writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { resolve, basename } from "path";
-import { downloadVideo, cleanupTempDir } from "./downloader";
+import { downloadVideo } from "./downloader";
 import { extractAudio } from "./audio";
 import { transcribeAudio, formatTranscript } from "./transcriber";
 import { generateEbook, type VideoMetadata } from "./ebook";
 import { readFile } from "fs/promises";
+import { getWorkspaceDir, getWorkspaceRoot } from "./workspace";
+import { rm } from "fs/promises";
 
 // Load environment variables
 config();
@@ -27,7 +29,7 @@ program
   .option("-m, --model <model>", "Deepgram model to use", "nova-3")
   .option("-o, --output <file>", "Output file path")
   .option("-t, --timestamps", "Include timestamps in transcript")
-  .option("--keep-temp", "Keep temporary files after processing")
+  .option("--cleanup", "Remove workspace directory after processing")
   .option("-f, --force", "Force re-download and re-extraction even if files exist")
   .option("--txt", "Output plain text instead of EPUB (alias for --no-epub)")
   .option("--no-epub", "Disable EPUB generation, output plain text only")
@@ -41,18 +43,25 @@ program
       process.exit(1);
     }
 
-    let tempDir: string | null = null;
+    let workspaceDir: string;
     let videoPath: string;
     let metadata: VideoMetadata | undefined;
 
     try {
+      // Get workspace directory for this input
+      const workspace = await getWorkspaceDir(input);
+      workspaceDir = workspace.projectDir;
+      
       // Check if input is a local file or URL
       const isLocalFile = existsSync(input);
       
       if (isLocalFile) {
-        // Use the local file directly
-        videoPath = resolve(input);
-        console.log(`Using local video file: ${videoPath}`);
+        // Copy local file to workspace
+        const localPath = resolve(input);
+        console.log(`Using local video file: ${localPath}`);
+        
+        // TODO: Copy video to workspace directory
+        videoPath = localPath;
         
         // Try to load metadata from existing info.json file
         const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
@@ -73,7 +82,6 @@ program
           force: options.force
         });
         videoPath = downloadResult.videoPath;
-        tempDir = downloadResult.tempDir;
         metadata = downloadResult.metadata;
         console.log(`Video downloaded: ${videoPath}`);
       }
@@ -124,6 +132,7 @@ program
           transcript: formattedTranscript,
           metadata,
           outputPath,
+          workspaceDir,
           useAI: options.ai !== false,
           aiApiKey
         });
@@ -138,19 +147,18 @@ program
         }
       }
 
-      // Clean up unless --keep-temp is specified
-      if (!options.keepTemp && tempDir) {
-        console.log("Cleaning up temporary files...");
-        await cleanupTempDir(tempDir);
+      // Clean up only if --cleanup is specified
+      if (options.cleanup) {
+        console.log("Cleaning up workspace directory...");
+        await rm(workspaceDir, { recursive: true, force: true });
+      } else {
+        console.log(`\nWorkspace files saved in: ${workspaceDir}`);
       }
 
     } catch (error) {
       console.error("Error:", error);
       
-      // Clean up on error unless --keep-temp is specified
-      if (!options.keepTemp && tempDir) {
-        await cleanupTempDir(tempDir);
-      }
+      // Don't clean up on error - keep files for debugging
       
       process.exit(1);
     }

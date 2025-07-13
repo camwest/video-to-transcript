@@ -189,3 +189,6 @@ downloads/
 temp/
 *.epub
 *.deepgram.json
+
+# Workspace directory for intermediate files
+video-to-transcript-workspace/

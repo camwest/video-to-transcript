@@ -1,10 +1,10 @@
 import { spawn } from "child_process";
 import { promisify } from "util";
-import { mkdtemp, rm, readdir, readFile } from "fs/promises";
-import { tmpdir } from "os";
+import { rm, readdir, readFile } from "fs/promises";
 import { join, resolve } from "path";
 import { existsSync } from "fs";
 import type { VideoMetadata } from "./ebook";
+import { getWorkspaceDir } from "./workspace";
 
 export interface DownloadOptions {
   url: string;
@@ -22,46 +22,48 @@ export interface DownloadResult {
 export async function downloadVideo(options: DownloadOptions): Promise<DownloadResult> {
   const { url, quality = "best[height<=480]", outputDir, force = false } = options;
 
-  // Extract video ID from URL
-  const videoIdMatch = url.match(/(?:v=|\/)([\w-]{11})(?:\?|&|$)/);
-  const videoId = videoIdMatch ? videoIdMatch[1] : null;
+  // Get workspace directory for this URL
+  const workspace = await getWorkspaceDir(url);
+  const { projectDir } = workspace;
 
-  // If not forcing and we have a video ID, check for existing video files
-  if (!force && videoId) {
-    const cwd = process.cwd();
-    const files = await readdir(cwd);
-    
-    // Look for video files containing the video ID
-    const existingVideo = files.find(file => 
-      file.includes(videoId) && 
-      (file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv'))
-    );
-    
-    if (existingVideo) {
-      const videoPath = resolve(cwd, existingVideo);
-      console.log(`✓ Using existing video file: ${videoPath}`);
+  // Check for existing video files in workspace if not forcing
+  if (!force) {
+    try {
+      const files = await readdir(projectDir);
       
-      // Try to load metadata from existing info.json file
-      const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
-      let metadata: VideoMetadata | undefined;
-      if (existsSync(infoJsonPath)) {
-        try {
-          const infoJson = await readFile(infoJsonPath, 'utf-8');
-          metadata = JSON.parse(infoJson);
-        } catch (error) {
-          console.warn("Failed to load existing metadata:", error);
+      // Look for video files
+      const existingVideo = files.find(file => 
+        file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv')
+      );
+      
+      if (existingVideo) {
+        const videoPath = resolve(projectDir, existingVideo);
+        console.log(`✓ Using existing video file: ${videoPath}`);
+        
+        // Try to load metadata from existing info.json file
+        const infoJsonPath = videoPath.replace(/\.(mp4|webm|mkv)$/, '.info.json');
+        let metadata: VideoMetadata | undefined;
+        if (existsSync(infoJsonPath)) {
+          try {
+            const infoJson = await readFile(infoJsonPath, 'utf-8');
+            metadata = JSON.parse(infoJson);
+          } catch (error) {
+            console.warn("Failed to load existing metadata:", error);
+          }
         }
+        
+        return { videoPath, tempDir: projectDir, metadata };
       }
-      
-      return { videoPath, tempDir: cwd, metadata };
+    } catch (error) {
+      // Directory doesn't exist yet, will be created during download
     }
   }
 
-  // Create temp directory if not provided
-  const tempDir = outputDir || await mkdtemp(join(tmpdir(), "video-to-transcript-"));
+  // Use workspace directory
+  const tempDir = outputDir || projectDir;
   
-  // Use a deterministic filename based on video ID
-  const videoFilename = videoId ? `${videoId}.%(ext)s` : "video.%(ext)s";
+  // Use a simple filename since we're in a dedicated directory
+  const videoFilename = "video.%(ext)s";
   const outputPath = join(tempDir, videoFilename);
 
   return new Promise((resolve, reject) => {
@@ -109,7 +111,7 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
       try {
         const files = await readdir(tempDir);
         const videoFile = files.find(file => 
-          (videoId && file.startsWith(videoId)) || (!videoId && file.startsWith('video'))
+          file.startsWith('video') && (file.endsWith('.mp4') || file.endsWith('.webm') || file.endsWith('.mkv'))
         );
         
         if (!videoFile) {
@@ -143,10 +145,5 @@ export async function downloadVideo(options: DownloadOptions): Promise<DownloadR
   });
 }
 
-export async function cleanupTempDir(tempDir: string): Promise<void> {
-  try {
-    await rm(tempDir, { recursive: true, force: true });
-  } catch (error) {
-    console.error(`Failed to cleanup temp directory: ${error}`);
-  }
-}
+// Cleanup function removed - files are kept by default
+// Use --cleanup flag in CLI to remove workspace directory

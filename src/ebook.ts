@@ -1,8 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { writeFile, unlink } from "fs/promises";
-import { tmpdir } from "os";
+import { writeFile } from "fs/promises";
 import { join } from "path";
 import { spawn } from "child_process";
 import { promisify } from "util";
@@ -31,6 +30,7 @@ export interface EbookOptions {
   transcript: string;
   metadata: VideoMetadata;
   outputPath: string;
+  workspaceDir: string;
   useAI?: boolean;
   aiApiKey?: string;
 }
@@ -248,7 +248,7 @@ em {
 `;
 
 export async function generateEbook(options: EbookOptions): Promise<void> {
-  const { transcript, metadata, outputPath, useAI = true, aiApiKey } = options;
+  const { transcript, metadata, outputPath, workspaceDir, useAI = true, aiApiKey } = options;
   
   // Check if Pandoc is available
   const pandocAvailable = await checkPandocAvailable();
@@ -267,11 +267,9 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
     description: metadata.description,
   };
   
-  // Temporary file paths
-  const tempDir = tmpdir();
-  const timestamp = Date.now();
-  const markdownPath = join(tempDir, `ebook-${timestamp}.md`);
-  const cssPath = join(tempDir, `kindle-${timestamp}.css`);
+  // Use workspace directory for temporary files
+  const markdownPath = join(workspaceDir, 'transcript.md');
+  const cssPath = join(workspaceDir, 'kindle.css');
   let coverPath: string | undefined;
   
   try {
@@ -282,7 +280,7 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
         enhancedMetadata.coverImage = await downloadImage(metadata.thumbnail);
         
         // Save cover image
-        coverPath = join(tempDir, `cover-${timestamp}.jpg`);
+        coverPath = join(workspaceDir, 'cover.jpg');
         await writeFile(coverPath, enhancedMetadata.coverImage);
       } catch (error) {
         console.warn("Failed to download cover image:", error);
@@ -356,10 +354,7 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
     });
     
   } finally {
-    // Clean up temporary files
-    const filesToClean = [markdownPath, cssPath, coverPath].filter(Boolean) as string[];
-    for (const file of filesToClean) {
-      await unlink(file).catch(() => {});
-    }
+    // Files are kept in workspace directory for debugging
+    console.log(`EPUB intermediate files saved in: ${workspaceDir}`);
   }
 }

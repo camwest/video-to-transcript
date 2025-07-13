@@ -75,7 +75,7 @@ bun run start "URL" -o output.epub --timestamps --force
 - `--timestamps` - Include timestamps
 - `-f, --force` - Skip cache, re-download/process
 - `--no-ai` - Disable AI metadata enhancement
-- `--keep-temp` - Keep temporary files
+- `--cleanup` - Remove workspace directory after processing
 
 ## Features
 
@@ -84,3 +84,4 @@ bun run start "URL" -o output.epub --timestamps --force
 - **EPUB Generation** - Rich ebook format with metadata and cover
 - **Progress Tracking** - Real-time download and processing progress
 - **Deterministic Paths** - Predictable file naming for reliability
+- **Workspace Directory** - All intermediate files saved in `video-to-transcript-workspace/` for debugging
