@@ -48,12 +48,12 @@ title: "Test"
     expect(prompt).toContain("Detected 2 speakers");
   });
   test("should identify Andrew and Lori from Huberman Lab podcast", async () => {
-    // Load the actual metadata from the workspace
-    const metadataPath = "/Users/camwest/src/video-to-transcript/video-to-transcript-workspace/lYK4UFf8mlc/video.info.json";
+    // Load the actual metadata from fixtures
+    const metadataPath = "./src/fixtures/huberman-gottlieb.info.json";
     const metadata = JSON.parse(readFileSync(metadataPath, 'utf-8'));
     
     // Load the transcript
-    const transcriptPath = "/Users/camwest/src/video-to-transcript/video-to-transcript-workspace/lYK4UFf8mlc/transcript.md";
+    const transcriptPath = "./src/fixtures/huberman-gottlieb.transcript.md";
     const transcript = readFileSync(transcriptPath, 'utf-8');
     
     // Get API key from environment

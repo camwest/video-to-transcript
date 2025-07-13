@@ -192,3 +192,6 @@ temp/
 
 # Workspace directory for intermediate files
 video-to-transcript-workspace/
+
+# Allow test fixtures
+!src/fixtures/**
