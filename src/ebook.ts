@@ -1,7 +1,8 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateObject } from "ai";
 import { z } from "zod";
-import { writeFile } from "fs/promises";
+import { writeFile, readFile } from "fs/promises";
+import { existsSync } from "fs";
 import { join } from "path";
 import { spawn } from "child_process";
 import { promisify } from "util";
@@ -236,16 +237,24 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
     // Identify and replace speaker names if AI is enabled
     let processedTranscript = transcript;
     if (useAI && aiApiKey) {
-      console.log("Identifying speakers with AI...");
-      const speakerMapping = await identifySpeakers(metadata, transcript, aiApiKey);
-      if (Object.keys(speakerMapping).length > 0) {
-        processedTranscript = replaceSpeakerNames(transcript, speakerMapping);
-        console.log("Speaker names replaced in transcript");
-        
-        // Save transcript with speaker names as intermediate artifact
-        const transcriptWithNamesPath = join(workspaceDir, 'transcript-with-names.md');
-        await writeFile(transcriptWithNamesPath, processedTranscript, 'utf-8');
-        console.log(`Transcript with speaker names saved: ${transcriptWithNamesPath}`);
+      // Check for cached transcript with speaker names
+      const transcriptWithNamesPath = join(workspaceDir, 'transcript-with-names.md');
+      const cachedTranscriptExists = existsSync(transcriptWithNamesPath);
+      
+      if (cachedTranscriptExists) {
+        console.log(`✓ Using existing transcript with speaker names: ${transcriptWithNamesPath}`);
+        processedTranscript = await readFile(transcriptWithNamesPath, 'utf-8');
+      } else {
+        console.log("Identifying speakers with AI...");
+        const speakerMapping = await identifySpeakers(metadata, transcript, aiApiKey);
+        if (Object.keys(speakerMapping).length > 0) {
+          processedTranscript = replaceSpeakerNames(transcript, speakerMapping);
+          console.log("Speaker names replaced in transcript");
+          
+          // Save transcript with speaker names as intermediate artifact
+          await writeFile(transcriptWithNamesPath, processedTranscript, 'utf-8');
+          console.log(`Transcript with speaker names saved: ${transcriptWithNamesPath}`);
+        }
       }
     }
     
