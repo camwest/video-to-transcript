@@ -241,6 +241,11 @@ export async function generateEbook(options: EbookOptions): Promise<void> {
       if (Object.keys(speakerMapping).length > 0) {
         processedTranscript = replaceSpeakerNames(transcript, speakerMapping);
         console.log("Speaker names replaced in transcript");
+        
+        // Save transcript with speaker names as intermediate artifact
+        const transcriptWithNamesPath = join(workspaceDir, 'transcript-with-names.md');
+        await writeFile(transcriptWithNamesPath, processedTranscript, 'utf-8');
+        console.log(`Transcript with speaker names saved: ${transcriptWithNamesPath}`);
       }
     }
     
