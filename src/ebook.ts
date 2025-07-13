@@ -58,7 +58,7 @@ const bookMetadataSchema = z.object({
 
 // Schema for speaker identification
 const speakerIdentificationSchema = z.object({
-  speakers: z.record(z.string()).describe("Mapping of speaker numbers to FIRST NAMES ONLY (e.g., '0': 'Andrew', '1': 'Lori')"),
+  speakers: z.record(z.string()).default({}).describe("Mapping of speaker numbers to FIRST NAMES ONLY (e.g., '0': 'Andrew', '1': 'Lori')"),
   confidence: z.enum(["high", "medium", "low"]).describe("Confidence in speaker identification accuracy")
 });
 
@@ -125,7 +125,7 @@ async function identifySpeakers(
     const { object } = await generateObject({
       model: openai("gpt-4.1"),
       schema: speakerIdentificationSchema,
-      system: "You are an expert at identifying speakers in YouTube video content. Extract FIRST NAMES ONLY from video metadata and transcript introductions.",
+      system: "You are an expert at identifying speakers in YouTube video content. Extract FIRST NAMES ONLY from video metadata and transcript introductions. Always return a speakers object, even if empty when names cannot be identified.",
       prompt: `Identify speakers by FIRST NAME ONLY for this YouTube video:
 
 Video Title: "${metadata.title}"
@@ -135,7 +135,8 @@ Transcript Start: "${transcriptSnippet}"
 
 Detected ${speakerCount} speakers. Return first names only (e.g., 'Andrew', 'Lori').
 Speaker 0 is typically the host/channel owner.
-Be confident only if names are clearly mentioned in the content.`,
+Be confident only if names are clearly mentioned in the content.
+If you cannot identify names with confidence, return an empty speakers object.`,
     });
 
     // Only return mapping if confidence is high or medium
@@ -144,8 +145,14 @@ Be confident only if names are clearly mentioned in the content.`,
       return {};
     }
 
+    // Ensure speakers object exists
+    if (!object.speakers || Object.keys(object.speakers).length === 0) {
+      console.warn("No speakers identified");
+      return {};
+    }
+
     console.log(`Speaker identification (${object.confidence} confidence):`, object.speakers);
-    return object.speakers;
+    return object.speakers || {};
 
   } catch (error) {
     console.warn("Speaker identification failed:", error);
